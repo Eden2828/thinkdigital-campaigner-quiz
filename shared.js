@@ -1,5 +1,7 @@
 // קוד תוצאה: JSON מקודד + חתימה, כדי שאי אפשר יהיה לערוך ציון ידנית בקלות.
 const SALT = 'td-quiz-2026';
+const PREFIX = typeof QUIZ_PREFIX !== 'undefined' ? QUIZ_PREFIX : 'TD1';
+const CODE_RE = new RegExp(PREFIX + '\\.[A-Za-z0-9+/=]+\\.[a-z0-9]+', 'g');
 
 function hash(str) {
   let h = 0x811c9dc5;
@@ -8,11 +10,11 @@ function hash(str) {
 }
 function encodeResult(obj) {
   const body = btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
-  return 'TD1.' + body + '.' + hash(SALT + body);
+  return PREFIX + '.' + body + '.' + hash(SALT + body);
 }
 function decodeResult(code) {
   const parts = code.trim().split('.');
-  if (parts.length !== 3 || parts[0] !== 'TD1') return null;
+  if (parts.length !== 3 || parts[0] !== PREFIX) return null;
   if (hash(SALT + parts[1]) !== parts[2]) return { invalid: true };
   try { return JSON.parse(decodeURIComponent(escape(atob(parts[1])))); } catch { return null; }
 }

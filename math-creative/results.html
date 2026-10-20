@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>תוצאות מבחן 2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">Think<span>Digital</span></div>
+    <a class="btn ghost" href="index.html" style="padding:8px 14px;font-size:14px">למבחן</a>
+  </header>
+
+  <section class="card">
+    <h1>לוח תוצאות: מתמטיקה וקריאייטיב</h1>
+    <p class="lead">מדביקים כאן את קודי התוצאה שהצוות שלח (אפשר כמה ביחד, ואפשר להדביק את כל ההודעה מהוואטסאפ). הקודים נשמרים בדפדפן הזה בלבד.</p>
+    <textarea id="paste" rows="5" placeholder="TD2...."></textarea>
+    <div class="row" style="margin-top:12px">
+      <button id="add">הוספה</button>
+      <span class="hint" id="msg" style="margin:0"></span>
+      <span class="spacer"></span>
+      <button class="ghost" id="clear">ניקוי הכל</button>
+    </div>
+  </section>
+
+  <section class="card" style="margin-top:16px">
+    <h2>דירוג</h2>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>#</th><th>שם</th><th>ציון</th><th>סטטוס</th><th>זמן</th><th>תאריך</th><th>נושא חלש</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+    <p class="hint" id="empty">עוד אין תוצאות.</p>
+  </section>
+
+  <section class="card" style="margin-top:16px">
+    <h2>ממוצע הצוות לפי נושא</h2>
+    <div class="bars" id="catbars"></div>
+  </section>
+
+  <section class="card" style="margin-top:16px">
+    <h2>השאלות שהכי הרבה טעו בהן</h2>
+    <div id="hard"></div>
+  </section>
+</div>
+
+<script src="questions.js"></script>
+<script src="../shared.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const KEY = PREFIX === 'TD1' ? 'td-quiz-results' : 'td-quiz-results-' + PREFIX;
+let results = [];
+try { results = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch {}
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(results)); } catch {} };
+
+$('add').onclick = () => {
+  const codes = $('paste').value.match(CODE_RE) || [];
+  let added = 0, bad = 0, dup = 0;
+  for (const code of codes) {
+    const r = decodeResult(code);
+    if (!r || r.invalid) { bad++; continue; }
+    if (results.some(x => x.d === r.d && x.n === r.n)) { dup++; continue; }
+    results.push(r); added++;
+  }
+  save(); render();
+  $('paste').value = '';
+  $('msg').textContent = codes.length ? `נוספו ${added}` + (dup ? `, ${dup} כפולים` : '') + (bad ? `, ${bad} קודים פגומים או ערוכים` : '') : 'לא נמצא קוד תקין';
+};
+$('clear').onclick = () => { if (confirm('למחוק את כל התוצאות מהדפדפן?')) { results = []; save(); render(); } };
+
+function render() {
+  const pct = r => Math.round(r.s / r.t * 100);
+  const sorted = [...results].sort((a, b) => pct(b) - pct(a));
+  $('empty').classList.toggle('hidden', results.length > 0);
+  $('rows').innerHTML = sorted.map((r, i) => {
+    const weak = Object.entries(r.c).map(([k, [ok, t]]) => [k, ok / t]).sort((a, b) => a[1] - b[1])[0];
+    const lv = levelFor(pct(r));
+    return `<tr><td>${i + 1}</td><td><b>${esc(r.n)}</b></td>
+      <td style="color:${colorFor(pct(r))};font-weight:800">${pct(r)}</td>
+      <td><span class="badge ${lv.cls}">${esc(lv.text)}</span></td>
+      <td>${r.m} ד'</td><td>${new Date(r.d).toLocaleDateString('he-IL')}</td>
+      <td>${weak ? esc(CATEGORIES[weak[0]]) : ''}</td>
+      <td><button class="ghost" style="padding:4px 10px" data-d="${esc(r.d)}">✕</button></td></tr>`;
+  }).join('');
+  $('rows').querySelectorAll('button').forEach(b => b.onclick = () => {
+    results = results.filter(r => r.d !== b.dataset.d); save(); render();
+  });
+
+  const agg = {};
+  for (const r of results) for (const [k, [ok, t]] of Object.entries(r.c)) { agg[k] ??= [0, 0]; agg[k][0] += ok; agg[k][1] += t; }
+  $('catbars').innerHTML = Object.keys(CATEGORIES).filter(k => agg[k]).map(k => {
+    const p = Math.round(agg[k][0] / agg[k][1] * 100);
+    return `<div class="bar"><div class="lbl"><span>${esc(CATEGORIES[k])}</span><span>${p}%</span></div>
+      <div class="track"><div class="fill" style="width:${p}%;background:${colorFor(p)}"></div></div></div>`;
+  }).join('') || '<p class="hint">עוד אין נתונים.</p>';
+
+  const miss = {};
+  for (const r of results) for (const id of r.w) miss[id] = (miss[id] || 0) + 1;
+  const top = Object.entries(miss).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  $('hard').innerHTML = top.map(([id, n]) => {
+    const q = QUESTIONS.find(x => x.id === id);
+    return q ? `<div class="ritem no"><div class="rq">${esc(q.q)}</div>
+      <div class="ra">טעו ${n} מתוך ${results.length}</div><div class="rexp">${esc(q.exp)}</div></div>` : '';
+  }).join('') || '<p class="hint">עוד אין נתונים.</p>';
+}
+render();
+</script>
+</body>
+</html>

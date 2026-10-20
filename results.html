@@ -52,13 +52,13 @@
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const KEY = 'td-quiz-results';
+const KEY = PREFIX === 'TD1' ? 'td-quiz-results' : 'td-quiz-results-' + PREFIX;
 let results = [];
 try { results = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch {}
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(results)); } catch {} };
 
 $('add').onclick = () => {
-  const codes = $('paste').value.match(/TD1\.[A-Za-z0-9+/=]+\.[a-z0-9]+/g) || [];
+  const codes = $('paste').value.match(CODE_RE) || [];
   let added = 0, bad = 0, dup = 0;
   for (const code of codes) {
     const r = decodeResult(code);

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>מבחן מתמטיקה וקריאייטיב</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">Think<span>Digital</span></div>
+    <a class="btn ghost" href="results.html" style="padding:8px 14px;font-size:14px">לוח תוצאות</a>
+  </header>
+
+  <!-- פתיחה -->
+  <section id="start" class="card">
+    <h1>מבחן קמפיינר 2: מתמטיקה וקריאייטיב</h1>
+    <p class="lead" id="intro"></p>
+    <div class="chips" id="cats"></div>
+    <label for="name">שם מלא</label>
+    <input type="text" id="name" placeholder="איך קוראים לך?" autocomplete="name">
+    <p class="hint">בשאלות החישוב כותבים מספר בלבד (בלי ₪ או %). מותר מחשבון, אסור לחפש בגוגל.</p>
+    <div class="row" style="margin-top:20px"><button id="go" disabled>מתחילים</button></div>
+  </section>
+
+  <!-- שאלה -->
+  <section id="quiz" class="card hidden">
+    <div class="meta"><span id="qcat"></span><span id="qnum"></span></div>
+    <div class="progress"><div id="bar"></div></div>
+    <div class="q" id="qtext"></div>
+    <div id="qbody"></div>
+    <div class="row" style="margin-top:20px">
+      <button class="ghost" id="prev">הקודמת</button>
+      <span class="spacer"></span>
+      <button id="next">הבאה</button>
+    </div>
+  </section>
+
+  <!-- תוצאה -->
+  <section id="result" class="hidden">
+    <div class="card">
+      <div class="meta"><span id="rname"></span><span id="rtime"></span></div>
+      <div class="score" id="rscore"></div>
+      <div id="rcount" style="color:var(--muted)"></div>
+      <div style="margin-top:10px"><span class="badge" id="rlevel"></span></div>
+      <div class="bars" id="rbars"></div>
+      <h2>שליחת התוצאה</h2>
+      <p class="hint" style="margin-top:0">שלחו את הקוד למנהל/ת הצוות. הוא חתום, ולכן אי אפשר לשנות בו את הציון.</p>
+      <div class="code" id="rcode"></div>
+      <div class="row" style="margin-top:12px">
+        <a class="btn" id="wa" target="_blank" rel="noopener">שליחה בוואטסאפ</a>
+        <button class="ghost" id="copy">העתקת קוד</button>
+        <span class="spacer"></span>
+        <button class="ghost" id="retry">מבחן חוזר</button>
+      </div>
+    </div>
+    <div class="card review">
+      <h2>מעבר על התשובות</h2>
+      <div id="rreview"></div>
+    </div>
+  </section>
+</div>
+
+<script src="questions.js"></script>
+<script src="../shared.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+let order = [], answers = {}, idx = 0, startedAt = 0;
+
+$('intro').textContent = `${QUESTIONS.length} שאלות ב-${Object.keys(CATEGORIES).length} נושאים, כולל חישובים. לוקח בערך 15–20 דקות. ציון עובר: 80.`;
+$('cats').innerHTML = Object.values(CATEGORIES).map(c => `<span class="chip">${esc(c)}</span>`).join('');
+$('name').addEventListener('input', e => $('go').disabled = e.target.value.trim().length < 2);
+$('name').addEventListener('keydown', e => { if (e.key === 'Enter' && !$('go').disabled) $('go').click(); });
+
+$('go').onclick = () => {
+  // נשארים לפי סדר הנושאים, אבל השאלות בכל נושא והתשובות מעורבבות
+  order = Object.keys(CATEGORIES).flatMap(cat => shuffle(QUESTIONS.filter(q => q.cat === cat)))
+    .map(q => ({ ...q, shown: q.type === 'mc' ? shuffle(q.opts) : null }));
+  answers = {}; idx = 0; startedAt = Date.now();
+  $('start').classList.add('hidden'); $('quiz').classList.remove('hidden');
+  render();
+};
+
+function render() {
+  const q = order[idx];
+  $('qcat').textContent = CATEGORIES[q.cat];
+  $('qnum').textContent = `${idx + 1} / ${order.length}`;
+  $('bar').style.width = `${(idx / order.length) * 100}%`;
+  $('qtext').textContent = q.q;
+  if (q.type === 'mc') {
+    $('qbody').innerHTML = q.shown.map((o, i) =>
+      `<button class="opt ${answers[q.id] === o ? 'sel' : ''}" data-i="${i}">${esc(o)}</button>`).join('');
+    $('qbody').querySelectorAll('.opt').forEach(b => b.onclick = () => {
+      answers[q.id] = q.shown[+b.dataset.i]; render();
+    });
+  } else {
+    $('qbody').innerHTML = `<div class="numrow"><input type="text" inputmode="decimal" id="num" placeholder="התשובה שלך" value="${esc(answers[q.id] ?? '')}"><span class="unit">${esc(q.unit || '')}</span></div>`;
+    const inp = $('num');
+    inp.oninput = () => { answers[q.id] = inp.value; updateNav(); };
+    inp.onkeydown = e => { if (e.key === 'Enter' && !$('next').disabled) $('next').click(); };
+    inp.focus();
+  }
+  updateNav();
+}
+function updateNav() {
+  const q = order[idx];
+  $('prev').disabled = idx === 0;
+  $('next').disabled = !(answers[q.id] && String(answers[q.id]).trim());
+  $('next').textContent = idx === order.length - 1 ? 'סיום והגשה' : 'הבאה';
+}
+$('prev').onclick = () => { if (idx > 0) { idx--; render(); } };
+$('next').onclick = () => { if (idx < order.length - 1) { idx++; render(); } else finish(); };
+
+function parseNum(s) {
+  return parseFloat(String(s).replace(/[,₪%\sx]/gi, ''));
+}
+function isCorrect(q, a) {
+  if (q.type === 'mc') return a === q.opts[0];
+  const v = parseNum(a);
+  if (isNaN(v)) return false;
+  const tol = q.tol ?? Math.max(Math.abs(q.answer) * 0.01, 0.01);
+  return Math.abs(v - q.answer) <= tol;
+}
+
+function finish() {
+  const name = $('name').value.trim();
+  const mins = Math.max(1, Math.round((Date.now() - startedAt) / 60000));
+  const byCat = {}; const wrong = [];
+  for (const q of order) {
+    byCat[q.cat] ??= [0, 0];
+    byCat[q.cat][1]++;
+    if (isCorrect(q, answers[q.id])) byCat[q.cat][0]++; else wrong.push(q.id);
+  }
+  const score = order.length - wrong.length;
+  const pct = Math.round(score / order.length * 100);
+  const code = encodeResult({ n: name, s: score, t: order.length, d: new Date().toISOString(), m: mins, c: byCat, w: wrong });
+
+  $('quiz').classList.add('hidden'); $('result').classList.remove('hidden');
+  $('rname').textContent = name;
+  $('rtime').textContent = `${mins} דקות`;
+  $('rscore').textContent = pct;
+  $('rscore').style.color = colorFor(pct);
+  $('rcount').textContent = `${score} תשובות נכונות מתוך ${order.length}`;
+  const lv = levelFor(pct);
+  $('rlevel').textContent = lv.text; $('rlevel').className = 'badge ' + lv.cls;
+  $('rbars').innerHTML = Object.entries(byCat).map(([cat, [ok, tot]]) => {
+    const p = Math.round(ok / tot * 100);
+    return `<div class="bar"><div class="lbl"><span>${esc(CATEGORIES[cat])}</span><span>${ok}/${tot}</span></div>
+      <div class="track"><div class="fill" style="width:${p}%;background:${colorFor(p)}"></div></div></div>`;
+  }).join('');
+  $('rcode').textContent = code;
+  const msg = `מבחן מתמטיקה וקריאייטיב: ${name}, ציון ${pct} (${score}/${order.length})\n\n${code}`;
+  $('wa').href = 'https://wa.me/?text=' + encodeURIComponent(msg);
+  $('copy').onclick = async () => {
+    try { await navigator.clipboard.writeText(code); $('copy').textContent = 'הועתק ✓'; } catch { $('copy').textContent = 'סמנו והעתיקו ידנית'; }
+  };
+  $('retry').onclick = () => location.reload();
+
+  // טעויות קודם, אחר כך תשובות נכונות
+  const sorted = [...order].sort((a, b) => isCorrect(a, answers[a.id]) - isCorrect(b, answers[b.id]));
+  $('rreview').innerHTML = sorted.map(q => {
+    const ok = isCorrect(q, answers[q.id]);
+    const right = q.type === 'mc' ? q.opts[0] : `${q.answer.toLocaleString('he-IL')} ${q.unit || ''}`;
+    return `<div class="ritem ${ok ? 'ok' : 'no'}">
+      <div class="rq">${ok ? '✓' : '✗'} ${esc(q.q)}</div>
+      ${ok ? '' : `<div class="ra">התשובה שלך: ${esc(answers[q.id] ?? '')}</div>`}
+      <div class="ra"><b>התשובה הנכונה:</b> ${esc(right)}</div>
+      <div class="rexp">${esc(q.exp)}</div></div>`;
+  }).join('');
+  window.scrollTo(0, 0);
+}
+</script>
+</body>
+</html>
